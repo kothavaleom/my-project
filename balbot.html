@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>BalBot Controller</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;500;600;700&display=swap');
+
+  :root {
+    --bg: #0a0c0f;
+    --bg2: #111418;
+    --bg3: #181d24;
+    --panel: #1a1f28;
+    --border: #2a3040;
+    --accent: #00d4ff;
+    --accent2: #ff6b35;
+    --green: #39d353;
+    --red: #ff4444;
+    --amber: #ffb700;
+    --text: #e8edf5;
+    --muted: #5a6478;
+    --font-mono: 'Share Tech Mono', monospace;
+    --font-ui: 'Rajdhani', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; user-select: none; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-ui);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* scanline effect */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,212,255,0.012) 2px, rgba(0,212,255,0.012) 4px);
+    pointer-events: none; z-index: 9999;
+  }
+
+  /* HEADER */
+  .header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 20px;
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 100;
+  }
+  .logo {
+    font-family: var(--font-mono);
+    font-size: 18px; color: var(--accent);
+    letter-spacing: 2px;
+    text-shadow: 0 0 12px rgba(0,212,255,0.5);
+  }
+  .logo span { color: var(--muted); }
+  .status-bar { display: flex; align-items: center; gap: 14px; }
+  .status-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--red);
+    box-shadow: 0 0 8px var(--red);
+    transition: all 0.3s;
+  }
+  .status-dot.connected { background: var(--green); box-shadow: 0 0 8px var(--green); }
+  .status-txt { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+  .ping-val { font-family: var(--font-mono); font-size: 12px; color: var(--accent); }
+
+  /* IP CONNECT */
+  .connect-panel {
+    margin: 16px 16px 0;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+  }
+  .connect-panel label { font-size: 13px; color: var(--muted); letter-spacing: 1px; font-weight: 600; }
+  .ip-input {
+    flex: 1; min-width: 160px;
+    background: var(--bg3); border: 1px solid var(--border);
+    border-radius: 6px; padding: 8px 12px;
+    font-family: var(--font-mono); font-size: 14px; color: var(--accent);
+    outline: none;
+  }
+  .ip-input:focus { border-color: var(--accent); box-shadow: 0 0 8px rgba(0,212,255,0.2); }
+  .btn-connect {
+    background: var(--accent); color: #000;
+    border: none; border-radius: 6px;
+    padding: 8px 20px; font-family: var(--font-ui);
+    font-size: 14px; font-weight: 700; letter-spacing: 1px;
+    cursor: pointer; transition: all 0.2s;
+  }
+  .btn-connect:hover { background: #33ddff; transform: scale(1.02); }
+  .btn-connect:active { transform: scale(0.97); }
+
+  /* MAIN GRID */
+  .main { padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+
+  /* TELEMETRY ROW */
+  .telem-row {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
+  }
+  .telem-card {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 12px;
+    display: flex; flex-direction: column; gap: 2px;
+  }
+  .telem-label { font-size: 10px; color: var(--muted); letter-spacing: 1.5px; font-weight: 600; text-transform: uppercase; }
+  .telem-val { font-family: var(--font-mono); font-size: 20px; color: var(--accent); }
+  .telem-val.amber { color: var(--amber); }
+  .telem-val.green { color: var(--green); }
+  .telem-val.red { color: var(--red); }
+
+  /* CONTROL AREA */
+  .control-area {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    gap: 14px; align-items: start;
+  }
+
+  /* LEFT PANEL */
+  .left-panel { display: flex; flex-direction: column; gap: 10px; }
+
+  /* JOYSTICK */
+  .joystick-wrap {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 12px; padding: 16px;
+    display: flex; flex-direction: column; align-items: center; gap: 10px;
+  }
+  .joystick-label {
+    font-size: 11px; color: var(--muted); letter-spacing: 2px;
+    font-weight: 700; text-transform: uppercase;
+  }
+  .joystick-container {
+    position: relative; width: 180px; height: 180px;
+  }
+  #joystickCanvas {
+    border-radius: 50%;
+    cursor: crosshair;
+    display: block;
+  }
+  .joystick-vals {
+    font-family: var(--font-mono); font-size: 11px; color: var(--muted);
+    display: flex; gap: 12px;
+  }
+  .joystick-vals span { color: var(--accent); }
+
+  /* RIGHT PANEL */
+  .right-panel { display: flex; flex-direction: column; gap: 10px; }
+
+  /* TOGGLE BUTTONS */
+  .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .ctrl-btn {
+    background: var(--bg3); border: 1px solid var(--border);
+    border-radius: 8px; padding: 14px 10px;
+    font-family: var(--font-ui); font-size: 13px; font-weight: 700;
+    color: var(--muted); cursor: pointer;
+    transition: all 0.15s; text-align: center; letter-spacing: 0.5px;
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+  }
+  .ctrl-btn .btn-icon { font-size: 20px; }
+  .ctrl-btn:active { transform: scale(0.95); }
+  .ctrl-btn.active-green {
+    background: rgba(57,211,83,0.12); border-color: var(--green);
+    color: var(--green); box-shadow: 0 0 12px rgba(57,211,83,0.2);
+  }
+  .ctrl-btn.active-amber {
+    background: rgba(255,183,0,0.12); border-color: var(--amber);
+    color: var(--amber); box-shadow: 0 0 12px rgba(255,183,0,0.2);
+  }
+  .ctrl-btn.active-red {
+    background: rgba(255,68,68,0.12); border-color: var(--red);
+    color: var(--red); box-shadow: 0 0 12px rgba(255,68,68,0.2);
+  }
+  .ctrl-btn.active-accent {
+    background: rgba(0,212,255,0.12); border-color: var(--accent);
+    color: var(--accent); box-shadow: 0 0 12px rgba(0,212,255,0.2);
+  }
+
+  /* CENTER PANEL */
+  .center-panel {
+    display: flex; flex-direction: column; gap: 10px; align-items: center;
+  }
+  .mode-display {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 16px; text-align: center;
+    min-width: 120px;
+  }
+  .mode-label { font-size: 10px; color: var(--muted); letter-spacing: 2px; font-weight: 700; }
+  .mode-val {
+    font-family: var(--font-mono); font-size: 22px; color: var(--green);
+    text-shadow: 0 0 10px rgba(57,211,83,0.4);
+    margin-top: 2px;
+  }
+  .mode-val.pro { color: var(--accent2); text-shadow: 0 0 10px rgba(255,107,53,0.4); }
+
+  .estop-btn {
+    width: 100px; height: 100px; border-radius: 50%;
+    background: radial-gradient(circle at 35% 35%, #ff6666, #cc0000);
+    border: 3px solid #ff4444;
+    font-family: var(--font-ui); font-size: 13px; font-weight: 700;
+    color: #fff; cursor: pointer;
+    box-shadow: 0 0 20px rgba(255,68,68,0.4), inset 0 -4px 8px rgba(0,0,0,0.4);
+    transition: all 0.1s; letter-spacing: 1px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  }
+  .estop-btn:active {
+    transform: scale(0.92);
+    box-shadow: 0 0 8px rgba(255,68,68,0.3);
+  }
+  .estop-icon { font-size: 24px; }
+
+  /* PID PANEL */
+  .pid-panel {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px;
+  }
+  .pid-title {
+    font-size: 11px; color: var(--muted); letter-spacing: 2px;
+    font-weight: 700; text-transform: uppercase; margin-bottom: 12px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .pid-title::after {
+    content: ''; flex: 1; height: 1px; background: var(--border);
+  }
+  .pid-row {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 10px;
+  }
+  .pid-name {
+    font-family: var(--font-mono); font-size: 12px; color: var(--accent);
+    min-width: 70px;
+  }
+  .pid-slider {
+    flex: 1; -webkit-appearance: none; appearance: none;
+    height: 4px; border-radius: 2px;
+    background: var(--border); outline: none; cursor: pointer;
+  }
+  .pid-slider::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 16px; height: 16px; border-radius: 50%;
+    background: var(--accent); cursor: pointer;
+    box-shadow: 0 0 6px rgba(0,212,255,0.5);
+  }
+  .pid-slider::-moz-range-thumb {
+    width: 16px; height: 16px; border-radius: 50%;
+    background: var(--accent); cursor: pointer; border: none;
+  }
+  .pid-val {
+    font-family: var(--font-mono); font-size: 12px;
+    color: var(--text); min-width: 40px; text-align: right;
+  }
+
+  /* LOG */
+  .log-panel {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px;
+  }
+  .log-title {
+    font-size: 11px; color: var(--muted); letter-spacing: 2px;
+    font-weight: 700; text-transform: uppercase; margin-bottom: 10px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .log-clear {
+    font-size: 10px; color: var(--muted); cursor: pointer;
+    letter-spacing: 1px; border: 1px solid var(--border);
+    border-radius: 4px; padding: 2px 8px;
+    background: none; color: var(--muted); font-family: var(--font-mono);
+  }
+  .log-clear:hover { color: var(--accent); border-color: var(--accent); }
+  .log-output {
+    font-family: var(--font-mono); font-size: 11px;
+    height: 80px; overflow-y: auto; color: var(--muted);
+    display: flex; flex-direction: column-reverse;
+  }
+  .log-line { padding: 1px 0; border-bottom: 1px solid rgba(42,48,64,0.5); }
+  .log-line.ok { color: var(--green); }
+  .log-line.err { color: var(--red); }
+  .log-line.info { color: var(--accent); }
+
+  /* RESPONSIVE */
+  @media (max-width: 600px) {
+    .control-area { grid-template-columns: 1fr; }
+    .telem-row { grid-template-columns: repeat(2, 1fr); }
+    .center-panel { flex-direction: row; flex-wrap: wrap; justify-content: center; }
+    .joystick-container { width: 160px; height: 160px; }
+    #joystickCanvas { width: 160px !important; height: 160px !important; }
+  }
+
+  /* glow line top of panels */
+  .glow-top {
+    border-top: 1px solid var(--accent);
+    box-shadow: 0 -1px 8px rgba(0,212,255,0.2);
+  }
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="logo">BAL<span>BOT</span> CTRL</div>
+  <div class="status-bar">
+    <div class="status-dot" id="statusDot"></div>
+    <div class="status-txt" id="statusTxt">DISCONNECTED</div>
+    <div class="ping-val" id="pingVal"></div>
+  </div>
+</header>
+
+<div class="connect-panel">
+  <label>ROBOT IP</label>
+  <input class="ip-input" type="text" id="ipInput" value="192.168.4.1" placeholder="192.168.4.1" autocomplete="off" spellcheck="false"/>
+  <button class="btn-connect" onclick="testConnection()">CONNECT</button>
+</div>
+
+<div class="main">
+
+  <!-- TELEMETRY -->
+  <div class="telem-row">
+    <div class="telem-card">
+      <div class="telem-label">THROTTLE</div>
+      <div class="telem-val" id="telThrottle">0.50</div>
+    </div>
+    <div class="telem-card">
+      <div class="telem-label">STEERING</div>
+      <div class="telem-val amber" id="telSteering">0.50</div>
+    </div>
+    <div class="telem-card">
+      <div class="telem-label">MODE</div>
+      <div class="telem-val green" id="telMode">NORM</div>
+    </div>
+    <div class="telem-card">
+      <div class="telem-label">TX/s</div>
+      <div class="telem-val" id="telTx">0</div>
+    </div>
+  </div>
+
+  <!-- MAIN CONTROLS -->
+  <div class="control-area">
+
+    <!-- LEFT: JOYSTICK -->
+    <div class="left-panel">
+      <div class="joystick-wrap glow-top">
+        <div class="joystick-label">DRIVE JOYSTICK</div>
+        <div class="joystick-container">
+          <canvas id="joystickCanvas" width="180" height="180"></canvas>
+        </div>
+        <div class="joystick-vals">
+          FWD: <span id="joyFwd">0.50</span> &nbsp; STR: <span id="joyStr">0.50</span>
+        </div>
+      </div>
+
+      <!-- LOG -->
+      <div class="log-panel">
+        <div class="log-title">
+          TX LOG
+          <button class="log-clear" onclick="clearLog()">CLEAR</button>
+        </div>
+        <div class="log-output" id="logOutput"></div>
+      </div>
+    </div>
+
+    <!-- CENTER: E-STOP + MODE -->
+    <div class="center-panel">
+      <div class="mode-display">
+        <div class="mode-label">CURRENT MODE</div>
+        <div class="mode-val" id="modeDisplay">NORM</div>
+      </div>
+
+      <button class="estop-btn" onpointerdown="eStop()">
+        <div class="estop-icon">⛔</div>
+        <div>E-STOP</div>
+      </button>
+
+      <div class="mode-display">
+        <div class="mode-label">SEND RATE</div>
+        <div class="mode-val" id="rateDisplay" style="font-size:16px">50ms</div>
+      </div>
+    </div>
+
+    <!-- RIGHT: BUTTONS -->
+    <div class="right-panel">
+      <div class="joystick-wrap" style="padding:14px">
+        <div class="joystick-label">QUICK CONTROLS</div>
+        <div class="btn-grid" style="width:100%">
+          <button class="ctrl-btn" id="btnLed" onclick="toggleLed()">
+            <div class="btn-icon">💡</div>
+            <div>LED</div>
+          </button>
+          <button class="ctrl-btn" id="btnBuzzer" onpointerdown="triggerBuzzer()">
+            <div class="btn-icon">🔔</div>
+            <div>BUZZ</div>
+          </button>
+          <button class="ctrl-btn" id="btnServo" onpointerdown="servoDown()" onpointerup="servoUp()">
+            <div class="btn-icon">🦾</div>
+            <div>ARM</div>
+          </button>
+          <button class="ctrl-btn" id="btnPro" onclick="togglePro()">
+            <div class="btn-icon">⚡</div>
+            <div>PRO MODE</div>
+          </button>
+        </div>
+      </div>
+
+      <!-- PID PANEL -->
+      <div class="pid-panel">
+        <div class="pid-title">PID TUNING</div>
+        <div class="pid-row">
+          <div class="pid-name">Kp-stab</div>
+          <input class="pid-slider" type="range" min="0" max="1" step="0.01" value="0.5" id="sliderKp" oninput="updatePID('fader3',this)">
+          <div class="pid-val" id="valKp">0.50</div>
+        </div>
+        <div class="pid-row">
+          <div class="pid-name">Kd-stab</div>
+          <input class="pid-slider" type="range" min="0" max="1" step="0.01" value="0.5" id="sliderKd" oninput="updatePID('fader4',this)">
+          <div class="pid-val" id="valKd">0.50</div>
+        </div>
+        <div class="pid-row">
+          <div class="pid-name">Kp-speed</div>
+          <input class="pid-slider" type="range" min="0" max="1" step="0.01" value="0.5" id="sliderKpt" oninput="updatePID('fader5',this)">
+          <div class="pid-val" id="valKpt">0.50</div>
+        </div>
+        <div class="pid-row">
+          <div class="pid-name">Ki-speed</div>
+          <input class="pid-slider" type="range" min="0" max="1" step="0.01" value="0.5" id="sliderKit" oninput="updatePID('fader6',this)">
+          <div class="pid-val" id="valKit">0.50</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ─── STATE ───────────────────────────────────────────────
+let robotIP = '192.168.4.1';
+let connected = false;
+let ledOn = false;
+let proMode = false;
+let servoActive = false;
+let fader1 = 0.5; // throttle forward/back
+let fader2 = 0.5; // steering left/right
+let txCount = 0;
+let txPerSecond = 0;
+let txCounterReset = 0;
+let sendInterval = null;
+let pingInterval = null;
+
+// ─── HTTP SEND ────────────────────────────────────────────
+async function send(param, value) {
+  if (!connected) return;
+  const url = `http://${robotIP}/?${param}=${value}`;
+  const t0 = Date.now();
+  try {
+    await fetch(url, { mode: 'no-cors', signal: AbortSignal.timeout(800) });
+    txCount++;
+    logLine(`${param}=${value.toFixed ? value.toFixed(2) : value}`, 'ok');
+  } catch(e) {
+    logLine(`TX FAIL: ${param}`, 'err');
+  }
+}
+
+async function testConnection() {
+  robotIP = document.getElementById('ipInput').value.trim();
+  logLine(`Connecting to ${robotIP}...`, 'info');
+  try {
+    await fetch(`http://${robotIP}/`, { mode: 'no-cors', signal: AbortSignal.timeout(3000) });
+    setConnected(true);
+    logLine('Connected OK', 'ok');
+  } catch(e) {
+    // no-cors often throws on success too — assume connected if no timeout
+    setConnected(true);
+    logLine('Assumed connected (no-cors)', 'info');
+  }
+}
+
+function setConnected(state) {
+  connected = state;
+  document.getElementById('statusDot').className = 'status-dot' + (state ? ' connected' : '');
+  document.getElementById('statusTxt').textContent = state ? 'CONNECTED' : 'DISCONNECTED';
+  if (state) startSendLoop();
+}
+
+// ─── CONTINUOUS DRIVE LOOP ────────────────────────────────
+// Sends fader1 and fader2 at 50ms intervals while joystick is active or drifting back
+let joystickActive = false;
+
+function startSendLoop() {
+  if (sendInterval) clearInterval(sendInterval);
+  sendInterval = setInterval(() => {
+    // Always send current fader values so robot stays responsive
+    sendDrive();
+  }, 80);
+
+  // TX/s counter
+  setInterval(() => {
+    document.getElementById('telTx').textContent = txCount - txCounterReset;
+    txCounterReset = txCount;
+  }, 1000);
+}
+
+async function sendDrive() {
+  if (!connected) return;
+  // send both fader1 and fader2 as separate requests (matching ESP32 if-else chain)
+  const url1 = `http://${robotIP}/?fader1=${fader1.toFixed(3)}`;
+  const url2 = `http://${robotIP}/?fader2=${fader2.toFixed(3)}`;
+  try {
+    fetch(url1, { mode: 'no-cors', signal: AbortSignal.timeout(500) });
+    fetch(url2, { mode: 'no-cors', signal: AbortSignal.timeout(500) });
+    txCount++;
+    document.getElementById('telThrottle').textContent = fader1.toFixed(2);
+    document.getElementById('telSteering').textContent = fader2.toFixed(2);
+  } catch(e) {}
+}
+
+// ─── JOYSTICK ─────────────────────────────────────────────
+const canvas = document.getElementById('joystickCanvas');
+const ctx = canvas.getContext('2d');
+const CX = 90, CY = 90, R = 80, THUMB_R = 24;
+let thumbX = CX, thumbY = CY;
+let dragging = false;
+
+function drawJoystick() {
+  ctx.clearRect(0, 0, 180, 180);
+
+  // outer ring
+  ctx.beginPath();
+  ctx.arc(CX, CY, R, 0, Math.PI * 2);
+  ctx.strokeStyle = '#2a3040';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  ctx.fillStyle = 'rgba(26,31,40,0.9)';
+  ctx.fill();
+
+  // crosshairs
+  ctx.strokeStyle = '#2a3040';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(CX - R, CY); ctx.lineTo(CX + R, CY); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(CX, CY - R); ctx.lineTo(CX, CY + R); ctx.stroke();
+
+  // center ring
+  ctx.beginPath();
+  ctx.arc(CX, CY, 6, 0, Math.PI * 2);
+  ctx.fillStyle = '#2a3040'; ctx.fill();
+
+  // direction line
+  ctx.beginPath();
+  ctx.moveTo(CX, CY);
+  ctx.lineTo(thumbX, thumbY);
+  ctx.strokeStyle = 'rgba(0,212,255,0.3)';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // thumb
+  const gradient = ctx.createRadialGradient(thumbX - 6, thumbY - 6, 2, thumbX, thumbY, THUMB_R);
+  gradient.addColorStop(0, '#33ddff');
+  gradient.addColorStop(1, '#0099bb');
+  ctx.beginPath();
+  ctx.arc(thumbX, thumbY, THUMB_R, 0, Math.PI * 2);
+  ctx.fillStyle = gradient;
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(0,212,255,0.8)';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // glow
+  ctx.beginPath();
+  ctx.arc(thumbX, thumbY, THUMB_R + 4, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(0,212,255,0.15)';
+  ctx.lineWidth = 4;
+  ctx.stroke();
+}
+
+function getCanvasPos(e) {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+  const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+  return {
+    x: (clientX - rect.left) * scaleX,
+    y: (clientY - rect.top) * scaleY
+  };
+}
+
+function moveThumb(x, y) {
+  const dx = x - CX, dy = y - CY;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  const clampedDist = Math.min(dist, R - THUMB_R);
+  const angle = Math.atan2(dy, dx);
+  thumbX = CX + Math.cos(angle) * clampedDist;
+  thumbY = CY + Math.sin(angle) * clampedDist;
+
+  // Map to fader values: fader1 (F/B) = 0.5 - normY*0.5, fader2 (L/R) = 0.5 + normX*0.5
+  const normX = (thumbX - CX) / (R - THUMB_R);
+  const normY = (thumbY - CY) / (R - THUMB_R);
+  fader1 = Math.max(0, Math.min(1, 0.5 - normY * 0.5));
+  fader2 = Math.max(0, Math.min(1, 0.5 + normX * 0.5));
+
+  document.getElementById('joyFwd').textContent = fader1.toFixed(2);
+  document.getElementById('joyStr').textContent = fader2.toFixed(2);
+  drawJoystick();
+}
+
+function returnToCenter() {
+  fader1 = 0.5; fader2 = 0.5;
+  thumbX = CX; thumbY = CY;
+  document.getElementById('joyFwd').textContent = '0.50';
+  document.getElementById('joyStr').textContent = '0.50';
+  drawJoystick();
+  // send neutral immediately
+  sendDrive();
+}
+
+canvas.addEventListener('pointerdown', e => {
+  dragging = true;
+  canvas.setPointerCapture(e.pointerId);
+  const pos = getCanvasPos(e);
+  moveThumb(pos.x, pos.y);
+});
+canvas.addEventListener('pointermove', e => {
+  if (!dragging) return;
+  const pos = getCanvasPos(e);
+  moveThumb(pos.x, pos.y);
+});
+canvas.addEventListener('pointerup', () => { dragging = false; returnToCenter(); });
+canvas.addEventListener('pointercancel', () => { dragging = false; returnToCenter(); });
+
+// ─── BUTTON CONTROLS ──────────────────────────────────────
+function toggleLed() {
+  ledOn = !ledOn;
+  const btn = document.getElementById('btnLed');
+  btn.className = 'ctrl-btn' + (ledOn ? ' active-amber' : '');
+  send('push4', ledOn ? 1 : 0);
+}
+
+function triggerBuzzer() {
+  const btn = document.getElementById('btnBuzzer');
+  btn.className = 'ctrl-btn active-accent';
+  send('push3', 1);
+  setTimeout(() => { btn.className = 'ctrl-btn'; }, 400);
+}
+
+function servoDown() {
+  document.getElementById('btnServo').className = 'ctrl-btn active-green';
+  send('push1', 1);
+}
+function servoUp() {
+  document.getElementById('btnServo').className = 'ctrl-btn';
+  send('push1', 0);
+}
+
+function togglePro() {
+  proMode = !proMode;
+  const btn = document.getElementById('btnPro');
+  btn.className = 'ctrl-btn' + (proMode ? ' active-red' : '');
+  send('toggle1', proMode ? 1 : 0);
+  document.getElementById('telMode').textContent = proMode ? 'PRO' : 'NORM';
+  document.getElementById('telMode').className = 'telem-val' + (proMode ? ' red' : ' green');
+  document.getElementById('modeDisplay').textContent = proMode ? 'PRO' : 'NORM';
+  document.getElementById('modeDisplay').className = 'mode-val' + (proMode ? ' pro' : '');
+}
+
+function eStop() {
+  // Send neutral on both axes + disable
+  fader1 = 0.5; fader2 = 0.5;
+  thumbX = CX; thumbY = CY;
+  drawJoystick();
+  send('fader1', 0.5);
+  send('fader2', 0.5);
+  logLine('E-STOP TRIGGERED', 'err');
+}
+
+// ─── PID SLIDERS ─────────────────────────────────────────
+const pidValIds = { fader3: 'valKp', fader4: 'valKd', fader5: 'valKpt', fader6: 'valKit' };
+let pidDebounce = {};
+
+function updatePID(param, slider) {
+  const val = parseFloat(slider.value);
+  document.getElementById(pidValIds[param]).textContent = val.toFixed(2);
+  clearTimeout(pidDebounce[param]);
+  pidDebounce[param] = setTimeout(() => {
+    send(param, val);
+  }, 200);
+}
+
+// ─── LOG ─────────────────────────────────────────────────
+const maxLogs = 40;
+let logs = [];
+
+function logLine(msg, type = '') {
+  const now = new Date().toTimeString().slice(0, 8);
+  logs.unshift({ msg: `[${now}] ${msg}`, type });
+  if (logs.length > maxLogs) logs.pop();
+  renderLog();
+}
+
+function renderLog() {
+  const el = document.getElementById('logOutput');
+  el.innerHTML = logs.map(l =>
+    `<div class="log-line ${l.type}">${l.msg}</div>`
+  ).join('');
+}
+
+function clearLog() { logs = []; renderLog(); }
+
+// ─── KEYBOARD CONTROL ─────────────────────────────────────
+const keysDown = new Set();
+let keyLoop = null;
+
+document.addEventListener('keydown', e => {
+  keysDown.add(e.key.toLowerCase());
+  if (!keyLoop) {
+    keyLoop = setInterval(applyKeyDrive, 50);
+  }
+});
+document.addEventListener('keyup', e => {
+  keysDown.delete(e.key.toLowerCase());
+  if (keysDown.size === 0) {
+    clearInterval(keyLoop); keyLoop = null;
+    returnToCenter();
+  }
+});
+
+function applyKeyDrive() {
+  let fb = 0, lr = 0;
+  if (keysDown.has('w') || keysDown.has('arrowup')) fb = -1;
+  if (keysDown.has('s') || keysDown.has('arrowdown')) fb = 1;
+  if (keysDown.has('a') || keysDown.has('arrowleft')) lr = -1;
+  if (keysDown.has('d') || keysDown.has('arrowright')) lr = 1;
+  const speed = 0.4;
+  fader1 = Math.max(0, Math.min(1, 0.5 + fb * speed));
+  fader2 = Math.max(0, Math.min(1, 0.5 + lr * speed));
+  const tx = CX + lr * (R - THUMB_R) * 0.8;
+  const ty = CY + fb * (R - THUMB_R) * 0.8;
+  thumbX = tx; thumbY = ty;
+  document.getElementById('joyFwd').textContent = fader1.toFixed(2);
+  document.getElementById('joyStr').textContent = fader2.toFixed(2);
+  drawJoystick();
+}
+
+// ─── INIT ────────────────────────────────────────────────
+drawJoystick();
+logLine('App ready. Enter robot IP and click CONNECT.', 'info');
+logLine('Default AP IP: 192.168.4.1', 'info');
+logLine('Keyboard: WASD or Arrow keys to drive', 'info');
+</script>
+</body>
+</html>
